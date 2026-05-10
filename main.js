@@ -21,7 +21,7 @@ let animationFrameId = null;
 
 function render() {
     if (video.videoWidth === 0) return;
-
+    
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -54,15 +54,15 @@ function formatTime(s) {
     return `${m}:${sec}`;
 }
 
-dropZone.addEventListener('click', () => videoUpload.click());
+dropZone.onclick = () => videoUpload.click();
 
-videoUpload.addEventListener('change', (e) => {
+videoUpload.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     if (video.src) URL.revokeObjectURL(video.src);
     video.src = URL.createObjectURL(file);
     video.load();
-});
+};
 
 video.onloadedmetadata = () => {
     cachedImgH = video.videoWidth * IMG_RATIO;
@@ -73,72 +73,57 @@ video.onloadedmetadata = () => {
     render();
 };
 
-playBtn.addEventListener('click', async () => {
+playBtn.onclick = async () => {
     if (isRecording) return;
     if (video.ended) video.currentTime = 0;
-    if (video.paused) {
-        video.play().then(() => render());
-    } else {
-        video.pause();
-    }
-});
+    video.paused ? video.play().then(() => render()) : video.pause();
+};
 
-volRange.addEventListener('input', () => {
+volRange.oninput = () => {
     video.volume = volRange.value;
     volIcon.textContent = video.volume == 0 ? '🔇' : (video.volume < 0.5 ? '🔉' : '🔊');
-});
+};
 
-progressBar.addEventListener('input', () => {
+progressBar.oninput = () => {
     video.currentTime = (progressBar.value / 100) * video.duration;
     if (!animationFrameId) render();
-});
+};
 
 video.onseeked = () => { if (!animationFrameId) render(); };
 
-downloadBtn.addEventListener('click', async () => {
+downloadBtn.onclick = async () => {
     if (isRecording || !video.src) return;
-
     isRecording = true;
-    const originalText = downloadBtn.textContent;
-    downloadBtn.textContent = "Encoding...";
+    downloadBtn.textContent = "...";
 
-    const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+    const mime = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+    const cvStream = canvas.captureStream(24);
+    const vStream = video.captureStream ? video.captureStream() : video.mozCaptureStream();
+    const tracks = [...cvStream.getVideoTracks()];
+    if (vStream.getAudioTracks()[0]) tracks.push(vStream.getAudioTracks()[0]);
 
-    const canvasStream = canvas.captureStream(24);
-    const videoStream = video.captureStream ? video.captureStream() : video.mozCaptureStream();
-    
-    const tracks = [...canvasStream.getVideoTracks()];
-    const audioTrack = videoStream.getAudioTracks()[0];
-    if (audioTrack) tracks.push(audioTrack);
-
-    const combinedStream = new MediaStream(tracks);
-    const recorder = new MediaRecorder(combinedStream, {
-        mimeType: mimeType,
-        videoBitsPerSecond: 2500000 
-    });
-
+    const mixed = new MediaStream(tracks);
+    const recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 2000000 });
     const chunks = [];
-    recorder.ondataavailable = e => chunks.push(e.data);
 
+    recorder.ondataavailable = e => chunks.push(e.data);
     recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: mimeType });
-        const url = URL.createObjectURL(blob);
+        const url = URL.createObjectURL(new Blob(chunks, { type: mime }));
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Output_${Date.now()}.mp4`;
+        a.download = `God_${Date.now()}.mp4`;
         a.click();
-
-        combinedStream.getTracks().forEach(track => track.stop());
-        chunks.length = 0;
         
+        mixed.getTracks().forEach(t => t.stop());
+        chunks.length = 0;
         setTimeout(() => {
             URL.revokeObjectURL(url);
-            downloadBtn.textContent = originalText;
+            downloadBtn.textContent = "Download";
             isRecording = false;
             video.pause();
             video.currentTime = 0;
             render();
-        }, 1000);
+        }, 500);
     };
 
     video.currentTime = 0;
@@ -146,12 +131,9 @@ downloadBtn.addEventListener('click', async () => {
     await video.play();
     render();
 
-    const checkEnd = () => {
-        if (video.ended) {
-            recorder.stop();
-        } else if (isRecording) {
-            requestAnimationFrame(checkEnd);
-        }
+    const check = () => {
+        if (video.ended) recorder.stop();
+        else if (isRecording) requestAnimationFrame(check);
     };
-    checkEnd();
-});
+    check();
+};
