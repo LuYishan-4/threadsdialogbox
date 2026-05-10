@@ -22,7 +22,12 @@ let animationFrameId = null;
 function render() {
     if (video.videoWidth === 0) return;
 
-    ctx.drawImage(overlayImg, 0, 0, canvas.width, cachedImgH);
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (overlayImg.complete) {
+        ctx.drawImage(overlayImg, 0, 0, canvas.width, cachedImgH);
+    }
     ctx.drawImage(video, 0, cachedImgH, canvas.width, video.videoHeight);
 
     if (!isRecording) updateUI();
@@ -71,7 +76,11 @@ video.onloadedmetadata = () => {
 playBtn.addEventListener('click', async () => {
     if (isRecording) return;
     if (video.ended) video.currentTime = 0;
-    video.paused ? video.play().then(() => render()) : video.pause();
+    if (video.paused) {
+        video.play().then(() => render());
+    } else {
+        video.pause();
+    }
 });
 
 volRange.addEventListener('input', () => {
@@ -90,32 +99,45 @@ downloadBtn.addEventListener('click', async () => {
     if (isRecording || !video.src) return;
 
     isRecording = true;
+    const originalText = downloadBtn.textContent;
     downloadBtn.textContent = "Encoding...";
 
     const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+
     const canvasStream = canvas.captureStream(24);
     const videoStream = video.captureStream ? video.captureStream() : video.mozCaptureStream();
     
     const tracks = [...canvasStream.getVideoTracks()];
-    if (videoStream.getAudioTracks()[0]) tracks.push(videoStream.getAudioTracks()[0]);
+    const audioTrack = videoStream.getAudioTracks()[0];
+    if (audioTrack) tracks.push(audioTrack);
 
-    const recorder = new MediaRecorder(new MediaStream(tracks), {
+    const combinedStream = new MediaStream(tracks);
+    const recorder = new MediaRecorder(combinedStream, {
         mimeType: mimeType,
         videoBitsPerSecond: 2500000 
     });
 
     const chunks = [];
     recorder.ondataavailable = e => chunks.push(e.data);
+
     recorder.onstop = () => {
-        const url = URL.createObjectURL(new Blob(chunks, { type: mimeType }));
+        const blob = new Blob(chunks, { type: mimeType });
+        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Export_${Date.now()}.mp4`;
+        a.download = `Output_${Date.now()}.mp4`;
         a.click();
+
+        combinedStream.getTracks().forEach(track => track.stop());
+        chunks.length = 0;
+        
         setTimeout(() => {
             URL.revokeObjectURL(url);
-            downloadBtn.textContent = "Download";
+            downloadBtn.textContent = originalText;
             isRecording = false;
+            video.pause();
+            video.currentTime = 0;
+            render();
         }, 1000);
     };
 
@@ -125,8 +147,11 @@ downloadBtn.addEventListener('click', async () => {
     render();
 
     const checkEnd = () => {
-        if (video.ended) recorder.stop();
-        else if (isRecording) requestAnimationFrame(checkEnd);
+        if (video.ended) {
+            recorder.stop();
+        } else if (isRecording) {
+            requestAnimationFrame(checkEnd);
+        }
     };
     checkEnd();
 });
