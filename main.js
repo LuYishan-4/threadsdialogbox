@@ -1,3 +1,7 @@
+/**
+ * Godlike Dialog - High Performance & HTML Synced
+ */
+
 const video = document.getElementById('hiddenVideo');
 const canvas = document.getElementById('mainCanvas');
 const ctx = canvas.getContext('2d');
@@ -14,16 +18,65 @@ const volIcon = document.getElementById('volIcon');
 const IMG_RATIO = 0.25;
 const overlayImg = new Image();
 overlayImg.src = './assets/image.webp';
-video.setAttribute('playsinline', '');
-video.setAttribute('webkit-playsinline', '');
 
 let isRecording = false;
+let cachedImgH = 0;
+let animationFrameId = null;
+
+
+
+function render() {
+    const vW = canvas.width;
+    const vH = video.videoHeight;
+    
+    if (vW === 0 || vH === 0) return;
+
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, vW, canvas.height);
+
+
+    if (overlayImg.complete) {
+        ctx.drawImage(overlayImg, 0, 0, vW, cachedImgH);
+    }
+    
+   
+    ctx.drawImage(video, 0, cachedImgH, vW, vH);
+
+
+    if (!isRecording) {
+        updateUI();
+    }
+
+    if (!video.paused && !video.ended || isRecording) {
+        animationFrameId = requestAnimationFrame(render);
+    } else {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
+}
+
+function updateUI() {
+    const cur = video.currentTime || 0;
+    const dur = video.duration || 0;
+    progressBar.value = (cur / dur) * 100 || 0;
+    timeDisplay.textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
+    playBtn.textContent = (video.paused || video.ended) ? "▶" : "⏸";
+}
+
+function formatTime(s) {
+    const m = Math.floor(s / 60).toString().padStart(2, '0');
+    const sec = Math.floor(s % 60).toString().padStart(2, '0');
+    return `${m}:${sec}`;
+}
+
 
 dropZone.onclick = () => videoUpload.click();
+
 
 videoUpload.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (video.src) URL.revokeObjectURL(video.src);
     video.src = URL.createObjectURL(file);
     video.load();
 };
@@ -32,110 +85,104 @@ videoUpload.onchange = (e) => {
 video.onloadedmetadata = () => {
     const vW = video.videoWidth;
     const vH = video.videoHeight;
-    const imgH = vW * IMG_RATIO;
+    cachedImgH = vW * IMG_RATIO;
 
+   
     canvas.width = vW;
-    canvas.height = vH + imgH;
+    canvas.height = vH + cachedImgH;
+
 
     dropZone.style.display = 'none';
     previewCard.style.display = 'block';
 
-
     video.currentTime = 0;
+    requestAnimationFrame(render);
 };
 
-video.onseeked = render;
-
-function render() {
-    const vW = canvas.width;
-    const vH = video.videoHeight;
-    const imgH = vW * IMG_RATIO;
-
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, vW, canvas.height);
-
-    if (overlayImg.complete) {
-        ctx.drawImage(overlayImg, 0, 0, vW, imgH);
-    }
-    ctx.drawImage(video, 0, imgH, vW, vH);
-
-
-    progressBar.value = (video.currentTime / video.duration) * 100 || 0;
-    timeDisplay.textContent = `${format(video.currentTime)} / ${format(video.duration || 0)}`;
-    playBtn.textContent = (video.paused || video.ended) ? "▶" : "⏸";
-
-    if (!video.paused && !video.ended || isRecording) {
-        requestAnimationFrame(render);
-    }
-}
-
-function format(s) {
-    const m = Math.floor(s / 60).toString().padStart(2, '0');
-    const sec = Math.floor(s % 60).toString().padStart(2, '0');
-    return `${m}:${sec}`;
-}
-
-
-playBtn.onclick = () => {
+playBtn.onclick = async () => {
     if (video.ended) video.currentTime = 0;
-    video.paused ? video.play() : video.pause();
-    render();
+    if (video.paused) {
+        try {
+            await video.play();
+            render(); 
+        } catch (err) { console.error("Playback Error", err); }
+    } else {
+        video.pause();
+    }
 };
 
 volRange.oninput = () => {
-    video.volume = volRange.value;
-    volIcon.textContent = video.volume === 0 ? '🔇' : (video.volume < 0.5 ? '🔉' : '🔊');
+    const v = volRange.value;
+    video.volume = v;
+    volIcon.textContent = v == 0 ? '🔇' : (v < 0.5 ? '🔉' : '🔊');
 };
 
 progressBar.oninput = () => {
+    if (!video.duration) return;
     video.currentTime = (progressBar.value / 100) * video.duration;
+    if (!animationFrameId) render();
 };
 
-video.onended = () => {
-    render();
+
+video.onseeked = () => {
+    if (!animationFrameId) render();
 };
+
 
 
 downloadBtn.onclick = async () => {
-    if (isRecording) return;
+    if (isRecording || !video.src) return;
+
     isRecording = true;
-    downloadBtn.textContent = "waiting for video to end...";
+    const originalBtnText = downloadBtn.textContent;
+    downloadBtn.textContent = "Encoding...";
 
+  
+    const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
 
+  
     const canvasStream = canvas.captureStream(30);
-
-
     const videoStream = video.captureStream ? video.captureStream() : video.mozCaptureStream();
-    const audioTrack = videoStream.getAudioTracks()[0];
+    
+    const tracks = [canvasStream.getVideoTracks()[0]];
+    if (videoStream.getAudioTracks().length > 0) {
+        tracks.push(videoStream.getAudioTracks()[0]);
+    }
 
-    const combinedStream = new MediaStream([canvasStream.getVideoTracks()[0]]);
-    if (audioTrack) combinedStream.addTrack(audioTrack);
-
+    const combinedStream = new MediaStream(tracks);
     const recorder = new MediaRecorder(combinedStream, {
-        mimeType: 'video/mp4;codecs=vp9',
-        videoBitsPerSecond: 8000000
+        mimeType: mimeType,
+        videoBitsPerSecond: 5000000
     });
 
     const chunks = [];
-    recorder.ondataavailable = e => chunks.push(e.data);
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
     recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'video/mp4' });
+        const blob = new Blob(chunks, { type: mimeType });
+        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `composed_video_${Date.now()}.mp4`;
+        a.href = url;
+        a.download = `GodlikeDialog_${Date.now()}.mp4`;
         a.click();
-        downloadBtn.textContent = "Download";
+        
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        downloadBtn.textContent = originalBtnText;
         isRecording = false;
         render();
     };
 
-    recorder.start();
     video.currentTime = 0;
+    recorder.start();
     await video.play();
+    render();
 
     const checkEnd = () => {
-        if (video.ended) recorder.stop();
-        else if (isRecording) requestAnimationFrame(checkEnd);
+        if (video.ended) {
+            recorder.stop();
+        } else if (isRecording) {
+            requestAnimationFrame(checkEnd);
+        }
     };
     checkEnd();
 };
