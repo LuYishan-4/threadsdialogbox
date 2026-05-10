@@ -110,17 +110,17 @@ downloadBtn.onclick = async () => {
     if (audioTrack) combinedStream.addTrack(audioTrack);
 
     const recorder = new MediaRecorder(combinedStream, {
-        mimeType: 'video/webm;codecs=vp9',
+        mimeType: 'video/mp4;codecs=vp9',
         videoBitsPerSecond: 8000000
     });
 
     const chunks = [];
     recorder.ondataavailable = e => chunks.push(e.data);
     recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'video/webm' });
+        const blob = new Blob(chunks, { type: 'video/mp4' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `composed_video_${Date.now()}.webm`;
+        a.download = `composed_video_${Date.now()}.mp4`;
         a.click();
         downloadBtn.textContent = "Download";
         isRecording = false;
