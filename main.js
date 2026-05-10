@@ -17,17 +17,22 @@ overlayImg.src = './assets/image.webp';
 let isRecording = false;
 let cachedImgH = 0;
 let animationFrameId = null;
+let lastUiUpdate = 0;
 
-function render() {
+function render(now) {
     if (video.videoWidth === 0) return;
     
     ctx.drawImage(overlayImg, 0, 0, canvas.width, cachedImgH);
     ctx.drawImage(video, 0, cachedImgH, canvas.width, video.videoHeight);
 
-  
-    updateUI();
+    if (now - lastUiUpdate > 100) {
+        updateUI();
+        lastUiUpdate = now;
+    }
 
-    if (!video.paused && !video.ended || isRecording) {
+    if (!video.paused && !video.ended) {
+        animationFrameId = requestAnimationFrame(render);
+    } else if (isRecording && !video.ended) {
         animationFrameId = requestAnimationFrame(render);
     } else {
         cancelAnimationFrame(animationFrameId);
@@ -72,13 +77,19 @@ video.onloadedmetadata = () => {
     canvas.height = video.videoHeight + cachedImgH;
     dropZone.style.display = 'none';
     previewCard.style.display = 'block';
-    render();
+    render(performance.now());
 };
 
 playBtn.onclick = () => {
     if (isRecording) return;
     if (video.ended) video.currentTime = 0;
-    video.paused ? video.play().then(() => render()) : video.pause();
+    if (video.paused) {
+        video.play().then(() => {
+            animationFrameId = requestAnimationFrame(render);
+        });
+    } else {
+        video.pause();
+    }
 };
 
 volRange.oninput = () => { video.volume = volRange.value; };
@@ -86,7 +97,7 @@ volRange.oninput = () => { video.volume = volRange.value; };
 progressBar.oninput = () => {
     if (isRecording) return;
     video.currentTime = (progressBar.value / 100) * video.duration;
-    if (!animationFrameId) render();
+    if (!animationFrameId) render(performance.now());
 };
 
 downloadBtn.onclick = async () => {
@@ -96,9 +107,15 @@ downloadBtn.onclick = async () => {
     downloadBtn.disabled = true;
     downloadBtn.textContent = "Processing...";
 
-    const mime = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+    const mime = MediaRecorder.isTypeSupported('video/mp4;codecs=h264') ? 'video/mp4' : 'video/webm';
 
-    const cvStream = canvas.captureStream(24);
+    video.pause();
+    video.currentTime = 0;
+    video.muted = true;
+
+    await new Promise(r => video.onseeked = r);
+
+    const cvStream = canvas.captureStream(30);
     const vStream = video.captureStream ? video.captureStream() : video.mozCaptureStream();
     
     const tracks = [...cvStream.getVideoTracks()];
@@ -107,7 +124,7 @@ downloadBtn.onclick = async () => {
     const mixed = new MediaStream(tracks);
     const recorder = new MediaRecorder(mixed, { 
         mimeType: mime, 
-        videoBitsPerSecond: 2000000 
+        videoBitsPerSecond: 5000000 
     });
 
     const chunks = [];
@@ -122,26 +139,21 @@ downloadBtn.onclick = async () => {
         a.click();
        
         mixed.getTracks().forEach(t => t.stop());
-        chunks.length = 0;
         
         setTimeout(() => {
             URL.revokeObjectURL(url);
             downloadBtn.disabled = false;
             downloadBtn.textContent = "Download Video";
             isRecording = false;
-            video.pause();
+            video.muted = false;
             video.currentTime = 0;
-            render();
+            render(performance.now());
         }, 500);
     };
 
-    video.currentTime = 0;
-    video.muted = true;
     recorder.start();
-    
-
     await video.play();
-    render();
+    render(performance.now());
 
     const check = () => {
         if (video.ended) {
