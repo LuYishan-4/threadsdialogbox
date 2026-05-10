@@ -9,7 +9,6 @@ const progressBar = document.getElementById('progressBar');
 const timeDisplay = document.getElementById('timeDisplay');
 const downloadBtn = document.getElementById('downloadBtn');
 const volRange = document.getElementById('volRange');
-const volIcon = document.getElementById('volIcon');
 
 const IMG_RATIO = 0.25;
 const overlayImg = new Image();
@@ -22,15 +21,11 @@ let animationFrameId = null;
 function render() {
     if (video.videoWidth === 0) return;
     
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    if (overlayImg.complete) {
-        ctx.drawImage(overlayImg, 0, 0, canvas.width, cachedImgH);
-    }
+    ctx.drawImage(overlayImg, 0, 0, canvas.width, cachedImgH);
     ctx.drawImage(video, 0, cachedImgH, canvas.width, video.videoHeight);
 
-    if (!isRecording) updateUI();
+  
+    updateUI();
 
     if (!video.paused && !video.ended || isRecording) {
         animationFrameId = requestAnimationFrame(render);
@@ -43,8 +38,15 @@ function render() {
 function updateUI() {
     const cur = video.currentTime || 0;
     const dur = video.duration || 1;
-    progressBar.value = (cur / dur) * 100;
-    timeDisplay.textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
+    const percent = (cur / dur) * 100;
+    
+    progressBar.value = percent;
+    
+    if (isRecording) {
+        timeDisplay.textContent = `Encoding: ${Math.floor(percent)}%`;
+    } else {
+        timeDisplay.textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
+    }
     playBtn.textContent = (video.paused || video.ended) ? "▶" : "⏸";
 }
 
@@ -73,52 +75,59 @@ video.onloadedmetadata = () => {
     render();
 };
 
-playBtn.onclick = async () => {
+playBtn.onclick = () => {
     if (isRecording) return;
     if (video.ended) video.currentTime = 0;
     video.paused ? video.play().then(() => render()) : video.pause();
 };
 
-volRange.oninput = () => {
-    video.volume = volRange.value;
-    volIcon.textContent = video.volume == 0 ? '🔇' : (video.volume < 0.5 ? '🔉' : '🔊');
-};
+volRange.oninput = () => { video.volume = volRange.value; };
 
 progressBar.oninput = () => {
+    if (isRecording) return;
     video.currentTime = (progressBar.value / 100) * video.duration;
     if (!animationFrameId) render();
 };
 
-video.onseeked = () => { if (!animationFrameId) render(); };
-
 downloadBtn.onclick = async () => {
     if (isRecording || !video.src) return;
+    
     isRecording = true;
-    downloadBtn.textContent = "...";
+    downloadBtn.disabled = true;
+    downloadBtn.textContent = "Processing...";
 
     const mime = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+
     const cvStream = canvas.captureStream(24);
     const vStream = video.captureStream ? video.captureStream() : video.mozCaptureStream();
+    
     const tracks = [...cvStream.getVideoTracks()];
     if (vStream.getAudioTracks()[0]) tracks.push(vStream.getAudioTracks()[0]);
 
     const mixed = new MediaStream(tracks);
-    const recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 2000000 });
-    const chunks = [];
+    const recorder = new MediaRecorder(mixed, { 
+        mimeType: mime, 
+        videoBitsPerSecond: 2000000 
+    });
 
+    const chunks = [];
     recorder.ondataavailable = e => chunks.push(e.data);
+    
     recorder.onstop = () => {
-        const url = URL.createObjectURL(new Blob(chunks, { type: mime }));
+        const blob = new Blob(chunks, { type: mime });
+        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `God_${Date.now()}.mp4`;
+        a.download = `Export_${Date.now()}.mp4`;
         a.click();
-        
+       
         mixed.getTracks().forEach(t => t.stop());
         chunks.length = 0;
+        
         setTimeout(() => {
             URL.revokeObjectURL(url);
-            downloadBtn.textContent = "Download";
+            downloadBtn.disabled = false;
+            downloadBtn.textContent = "Download Video";
             isRecording = false;
             video.pause();
             video.currentTime = 0;
@@ -127,13 +136,19 @@ downloadBtn.onclick = async () => {
     };
 
     video.currentTime = 0;
+    video.muted = true;
     recorder.start();
+    
+
     await video.play();
     render();
 
     const check = () => {
-        if (video.ended) recorder.stop();
-        else if (isRecording) requestAnimationFrame(check);
+        if (video.ended) {
+            recorder.stop();
+        } else if (isRecording) {
+            requestAnimationFrame(check);
+        }
     };
     check();
 };
