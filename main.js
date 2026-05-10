@@ -14,6 +14,8 @@ const volIcon = document.getElementById('volIcon');
 const IMG_RATIO = 0.25;
 const overlayImg = new Image();
 overlayImg.src = './assets/image.webp';
+video.setAttribute('playsinline', '');
+video.setAttribute('webkit-playsinline', '');
 
 let isRecording = false;
 
