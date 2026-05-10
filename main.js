@@ -18,21 +18,13 @@ const timeDisplay = document.getElementById('timeDisplay');
 const loadingOverlay = document.getElementById('loadingOverlay');
 const loadingText = document.getElementById('loadingText');
 
-const IMG_RATIO = 0.25;
-const overlayImg = new Image();
-overlayImg.src = 'assets/image.webp';
-let cachedImgH = 0;
-let isRendering = false;
+const overlayImgSrc = 'assets/image.webp';
+let finalVideoBlobUrl = null;
 
-function draw() {
-    if (video.videoWidth === 0) return;
-    ctx.drawImage(overlayImg, 0, 0, canvas.width, cachedImgH);
-    ctx.drawImage(video, 0, cachedImgH, canvas.width, video.videoHeight);
-}
 
 function renderLoop() {
     if (!video.paused && !video.ended) {
-        draw();
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         updateUI();
         requestAnimationFrame(renderLoop);
     }
@@ -52,23 +44,71 @@ function formatTime(s) {
     return `${m}:${sec}`;
 }
 
-dropZone.onclick = () => videoUpload.click();
 
-videoUpload.onchange = (e) => {
+videoUpload.onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    video.src = URL.createObjectURL(file);
-    video.load();
+
+    try {
+
+        loadingOverlay.style.display = 'flex';
+        loadingText.textContent = "waitting";
+
+        if (!ffmpeg.isLoaded()) await ffmpeg.load();
+
+        loadingText.textContent = "get ready...";
+        ffmpeg.FS('writeFile', 'temp_in.mp4', await fetchFile(file));
+        ffmpeg.FS('writeFile', 'mask.webp', await fetchFile(overlayImgSrc));
+
+
+        const tempVideo = document.createElement('video');
+        tempVideo.src = URL.createObjectURL(file);
+        await new Promise(r => tempVideo.onloadedmetadata = r);
+        const vw = tempVideo.videoWidth;
+        
+        loadingText.textContent = ".....";
+
+   
+        const filter = `[1:v]scale=${vw}:-1[img];[img][0:v]vstack=inputs=2`;
+        await ffmpeg.run(
+            '-i', 'temp_in.mp4',
+            '-i', 'mask.webp',
+            '-filter_complex', filter,
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-c:a', 'copy', 
+            'out.mp4'
+        );
+
+
+        const data = ffmpeg.FS('readFile', 'out.mp4');
+        finalVideoBlobUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+
+     
+        video.src = finalVideoBlobUrl;
+        video.load();
+
+        loadingText.textContent = "Done!";
+        setTimeout(() => {
+            loadingOverlay.style.display = 'none';
+            dropZone.style.display = 'none';
+            previewCard.style.display = 'block';
+        }, 500);
+
+    } catch (err) {
+        console.error(err);
+        alert("FAILED TO PROCESS VIDEO.");
+        loadingOverlay.style.display = 'none';
+    }
 };
 
 video.onloadedmetadata = () => {
-    cachedImgH = video.videoWidth * IMG_RATIO;
+  
     canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight + cachedImgH;
-    dropZone.style.display = 'none';
-    previewCard.style.display = 'block';
-    setTimeout(draw, 100);
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 };
+
 
 playBtn.onclick = () => {
     if (video.paused) {
@@ -81,61 +121,18 @@ playBtn.onclick = () => {
 
 progressBar.oninput = () => {
     video.currentTime = (progressBar.value / 100) * video.duration;
-    draw();
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 };
 
 volRange.oninput = () => { video.volume = volRange.value; };
 
 
-downloadBtn.onclick = async () => {
-    const file = videoUpload.files[0];
-    if (!file) return;
-
-    try {
-        loadingOverlay.style.display = 'flex';
-        downloadBtn.disabled = true;
-
-        if (!ffmpeg.isLoaded()) {
-            loadingText.textContent = "d";
-            await ffmpeg.load();
-        }
-
-        loadingText.textContent = "waiting";
-        ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(file));
-        ffmpeg.FS('writeFile', 'mask.webp', await fetchFile(overlayImg.src));
-
-        loadingText.textContent = "114514";
-
-        const filter = `[1:v]scale=${video.videoWidth}:-1[img];[img][0:v]vstack=inputs=2`;
-
-        await ffmpeg.run(
-            '-i', 'input.mp4',
-            '-i', 'mask.webp',
-            '-filter_complex', filter,
-            '-c:v', 'libx264',
-            '-preset', 'ultrafast',
-            '-c:a', 'copy', 
-            'output.mp4'
-        );
-
-        loadingText.textContent = "Done";
-        const data = ffmpeg.FS('readFile', 'output.mp4');
-        const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
-        
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `GodTalk_${Date.now()}.mp4`;
-        a.click();
-
-        ffmpeg.FS('unlink', 'input.mp4');
-        ffmpeg.FS('unlink', 'mask.webp');
-        ffmpeg.FS('unlink', 'output.mp4');
-
-    } catch (err) {
-        console.error(err);
-        alert("fail to process video. Please try again.");
-    } finally {
-        loadingOverlay.style.display = 'none';
-        downloadBtn.disabled = false;
-    }
+downloadBtn.onclick = () => {
+    if (!finalVideoBlobUrl) return;
+    const a = document.createElement('a');
+    a.href = finalVideoBlobUrl;
+    a.download = `GodTalk_Ready_${Date.now()}.mp4`;
+    a.click();
 };
+
+dropZone.onclick = () => videoUpload.click();
