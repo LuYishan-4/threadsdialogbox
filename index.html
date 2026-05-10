@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>神人對話框</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<div class="glass-container">
+    <header class="app-header">
+        <div class="title-box">
+            <img src="assets/emoji.png" alt="icon" class="title-icon">
+            <h1>神人對話框</h1>
+        </div>
+    </header>
+
+    <!-- 上傳區 -->
+    <div class="upload-zone" id="dropZone">
+        <input type="file" id="videoUpload" accept="video/*" hidden>
+        <div class="upload-content">
+            <span class="upload-icon">📂</span>
+        </div>
+    </div>
+
+    <div class="preview-card" id="previewCard">
+        <div class="preview-box">
+            <canvas id="mainCanvas"></canvas>
+            
+            <div class="video-controls">
+                <input type="range" id="progressBar" value="0" min="0" max="100" step="0.1">
+                <div class="control-bar-main">
+                    <div class="left-group">
+                        <button id="playBtn" class="play-trigger">▶</button>
+                        <span id="timeDisplay">00:00 / 00:00</span>
+                    </div>
+                    
+                    <div class="right-group">
+                        <div class="vol-box">
+                            <span id="volIcon">🔊</span>
+                            <input type="range" id="volRange" min="0" max="1" step="0.01" value="1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="action-footer">
+            <button id="downloadBtn" class="download-btn">Download</button>
+        </div>
+    </div>
+
+    <footer class="social-links">
+        <a href="https://github.com/LuYishan-4" target="_blank" class="social-item">
+            <i class="fab fa-github"></i> GitHub
+        </a>
+        <a href="https://www.youtube.com/watch?v=W8DCWI_Gc9c" target="_blank" class="social-item yt">
+            <i class="fab fa-youtube"></i> YouTube
+        </a>
+    </footer>
+</div>
+
+<video id="hiddenVideo" style="display:none;" playsinline></video>
+<script src="main.js"></script>
+</body>
+</html>
