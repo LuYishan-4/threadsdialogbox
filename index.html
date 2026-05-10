@@ -3,19 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>神人對話框</title>
+    <title>神人對話框..</title>
+    
+
+    <script src="coi-serviceworker.js"></script>
+
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
 </head>
-<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
-
-
-<div id="loadingOverlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.9); z-index:9999; flex-direction:column; align-items:center; justify-content:center; color:white;">
-    <div style="width:50px; height:50px; border:5px solid rgba(255,255,255,0.1); border-top:5px solid #00f2fe; border-radius:50%; animation:spin 1s linear infinite;"></div>
-    <p id="loadingText" style="margin-top:20px; font-weight:bold;">:</p>
-    <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
-</div>
 <body>
+
+<div id="loadingOverlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.95); z-index:9999; flex-direction:column; align-items:center; justify-content:center; color:white;">
+    <div class="spinner"></div>
+    <p id="loadingText" style="margin-top:20px; font-weight:bold; letter-spacing: 2px;">waitting</p>
+    <p style="font-size: 12px; opacity: 0.5; margin-top: 8px;">處理期間請勿關閉頁面</p>
+    <style>
+        .spinner {
+            width: 50px; height: 50px;
+            border: 5px solid rgba(255,255,255,0.1);
+            border-top: 5px solid #00f2fe;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</div>
 
 <div class="glass-container">
     <header class="app-header">
@@ -30,6 +45,7 @@
         <input type="file" id="videoUpload" accept="video/*" hidden>
         <div class="upload-content">
             <span class="upload-icon">📂</span>
+            <p style="margin-top:15px; font-size: 0.9rem; opacity: 0.6;">點擊或拖放影片至此</p>
         </div>
     </div>
 
@@ -70,7 +86,9 @@
     </footer>
 </div>
 
+
 <video id="hiddenVideo" style="display:none;" playsinline></video>
+
 <script src="main.js"></script>
 </body>
 </html>
