@@ -1,7 +1,3 @@
-/**
- * Godlike Dialog - High Performance & HTML Synced
- */
-
 const video = document.getElementById('hiddenVideo');
 const canvas = document.getElementById('mainCanvas');
 const ctx = canvas.getContext('2d');
@@ -23,8 +19,6 @@ let isRecording = false;
 let cachedImgH = 0;
 let animationFrameId = null;
 
-
-
 function render() {
     const vW = canvas.width;
     const vH = video.videoHeight;
@@ -34,14 +28,11 @@ function render() {
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, vW, canvas.height);
 
-
-    if (overlayImg.complete) {
+    if (overlayImg.complete && overlayImg.naturalWidth !== 0) {
         ctx.drawImage(overlayImg, 0, 0, vW, cachedImgH);
     }
     
-   
     ctx.drawImage(video, 0, cachedImgH, vW, vH);
-
 
     if (!isRecording) {
         updateUI();
@@ -69,90 +60,76 @@ function formatTime(s) {
     return `${m}:${sec}`;
 }
 
+dropZone.addEventListener('click', () => videoUpload.click());
 
-dropZone.onclick = () => videoUpload.click();
-
-
-videoUpload.onchange = (e) => {
+videoUpload.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
     if (video.src) URL.revokeObjectURL(video.src);
     video.src = URL.createObjectURL(file);
     video.load();
-};
-
+});
 
 video.onloadedmetadata = () => {
     const vW = video.videoWidth;
     const vH = video.videoHeight;
     cachedImgH = vW * IMG_RATIO;
-
-   
     canvas.width = vW;
     canvas.height = vH + cachedImgH;
-
-
     dropZone.style.display = 'none';
     previewCard.style.display = 'block';
-
     video.currentTime = 0;
     requestAnimationFrame(render);
 };
 
-playBtn.onclick = async () => {
+playBtn.addEventListener('click', async () => {
+    if (isRecording) return;
     if (video.ended) video.currentTime = 0;
     if (video.paused) {
         try {
             await video.play();
             render(); 
-        } catch (err) { console.error("Playback Error", err); }
+        } catch (err) { console.error(err); }
     } else {
         video.pause();
     }
-};
+});
 
-volRange.oninput = () => {
+volRange.addEventListener('input', () => {
     const v = volRange.value;
     video.volume = v;
     volIcon.textContent = v == 0 ? '🔇' : (v < 0.5 ? '🔉' : '🔊');
-};
+});
 
-progressBar.oninput = () => {
+progressBar.addEventListener('input', () => {
     if (!video.duration) return;
     video.currentTime = (progressBar.value / 100) * video.duration;
     if (!animationFrameId) render();
-};
-
+});
 
 video.onseeked = () => {
     if (!animationFrameId) render();
 };
 
-
-
-downloadBtn.onclick = async () => {
+downloadBtn.addEventListener('click', async () => {
     if (isRecording || !video.src) return;
 
     isRecording = true;
     const originalBtnText = downloadBtn.textContent;
     downloadBtn.textContent = "Encoding...";
 
-  
     const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
-
-  
     const canvasStream = canvas.captureStream(30);
     const videoStream = video.captureStream ? video.captureStream() : video.mozCaptureStream();
     
     const tracks = [canvasStream.getVideoTracks()[0]];
-    if (videoStream.getAudioTracks().length > 0) {
-        tracks.push(videoStream.getAudioTracks()[0]);
-    }
+    const audioTrack = videoStream.getAudioTracks()[0];
+    if (audioTrack) tracks.push(audioTrack);
 
     const combinedStream = new MediaStream(tracks);
     const recorder = new MediaRecorder(combinedStream, {
         mimeType: mimeType,
-        videoBitsPerSecond: 5000000
+        videoBitsPerSecond: 5000000 
     });
 
     const chunks = [];
@@ -166,10 +143,12 @@ downloadBtn.onclick = async () => {
         a.download = `GodlikeDialog_${Date.now()}.mp4`;
         a.click();
         
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        downloadBtn.textContent = originalBtnText;
-        isRecording = false;
-        render();
+        setTimeout(() => {
+            URL.revokeObjectURL(url);
+            downloadBtn.textContent = originalBtnText;
+            isRecording = false;
+            render();
+        }, 1000);
     };
 
     video.currentTime = 0;
@@ -185,4 +164,4 @@ downloadBtn.onclick = async () => {
         }
     };
     checkEnd();
-};
+});
